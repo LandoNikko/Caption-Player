@@ -1,0 +1,1 @@
+Synchronized captions for audio. Like an audiobook visualizer with just closed captions.
