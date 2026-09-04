@@ -23,6 +23,8 @@
     .hamburger-btn { display: none; flex-direction: column; justify-content: center; gap: 5px; width: 44px; height: 44px; padding: 10px; border: 1px solid #2a2e36; border-radius: 4px; background: transparent; color: #e8e9ec; flex-shrink: 0; }
     .hamburger-btn span { display: block; height: 2px; background: currentColor; border-radius: 1px; }
     .hamburger-btn:hover { border-color: #86d7e2; color: #86d7e2; }
+    .fullscreen-btn { position: fixed; top: calc(14px + env(safe-area-inset-top, 0px)); left: calc(20px + env(safe-area-inset-left, 0px)); z-index: 60; width: 44px; height: 44px; padding: 0; border: 1px solid #2a2e36; border-radius: 4px; background: rgba(12, 13, 16, 0.88); color: #e8e9ec; font-size: 22px; line-height: 1; }
+    .fullscreen-btn:hover { border-color: #86d7e2; color: #86d7e2; }
     .file-btn { display: flex; align-items: center; gap: 8px; padding: 8px 14px; border: 1px solid #2a2e36; border-radius: 4px; background: transparent; color: #e8e9ec; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; white-space: nowrap; }
     .file-btn:hover { border-color: #86d7e2; color: #86d7e2; }
     .file-btn.active { border-color: #86d7e2; color: #86d7e2; background: rgba(134,215,226,0.08); }
@@ -98,6 +100,19 @@
     @media (hover: none), (pointer: coarse) {
       .drag-overlay { display: none !important; }
     }
+
+    .fullscreen-tap-zones { display: none; }
+    body.app-fullscreen { grid-template-rows: 1fr; }
+    body.app-fullscreen header { display: none; }
+    body.app-fullscreen footer { position: fixed; right: 0; bottom: 0; left: 0; z-index: 50; border: 0; padding-bottom: env(safe-area-inset-bottom, 0px); background: transparent; }
+    body.app-fullscreen .transport { display: none; }
+    body.app-fullscreen .scrub-track { padding: 0 max(28px, env(safe-area-inset-left, 0px)); }
+    body.app-fullscreen .knob { display: none; }
+    body.app-fullscreen .caption-text { user-select: none; -webkit-user-select: none; }
+    body.app-fullscreen .fullscreen-tap-zones { position: fixed; inset: 0 0 26px; z-index: 40; display: grid; grid-template-columns: repeat(4, 1fr); }
+    .fullscreen-tap-zone { position: relative; border: 0; padding: 0; background: transparent; color: transparent; }
+    .fullscreen-tap-zone::after { content: ''; position: absolute; right: 0; bottom: 0; left: 0; height: min(28vh, 180px); pointer-events: none; opacity: 0.55; background: linear-gradient(to top, rgba(134,215,226,0.32), transparent) left bottom / 1px 100% no-repeat, linear-gradient(to top, rgba(134,215,226,0.32), transparent) right bottom / 1px 100% no-repeat, linear-gradient(to right, transparent, rgba(134,215,226,0.32) 18%, rgba(134,215,226,0.32) 82%, transparent) bottom / 100% 1px no-repeat; }
+    .fullscreen-tap-zone:focus-visible { outline: 2px solid #86d7e2; outline-offset: -4px; }
 
     .error { position: fixed; left: 28px; bottom: 110px; z-index: 30; background: #2a1618; border: 1px solid #6b2a30; color: #f0c7cb; padding: 10px 14px; border-radius: 4px; font-family: ui-monospace, Menlo, monospace; font-size: 12px; display: none; }
     .error.show { display: block; }
@@ -205,6 +220,8 @@
         padding: 0 16px;
         touch-action: none;
       }
+      body.app-fullscreen .scrub-track { padding: 0 max(16px, env(safe-area-inset-left, 0px)); }
+      body.app-fullscreen .fullscreen-tap-zones { bottom: calc(36px + env(safe-area-inset-bottom, 0px)); }
       .scrub-bar { height: 6px; }
       .knob { width: 16px; height: 16px; margin-left: -8px; margin-top: -8px; }
 
@@ -270,6 +287,7 @@
     <button class="file-btn" onclick="closeMenu(); togglePanel()">Style</button>
   </div>
 </header>
+<button type="button" class="fullscreen-btn" id="fullscreenBtn" aria-label="Enter full screen" title="Enter full screen" onclick="toggleFullscreen()">⛶</button>
 
 <main id="main">
   <section class="stage">
@@ -301,6 +319,13 @@
     <div class="clock" id="clock">0:00 / 0:00</div>
   </div>
 </footer>
+
+<div class="fullscreen-tap-zones" id="fullscreenTapZones" aria-label="Full screen playback controls">
+  <button type="button" class="fullscreen-tap-zone" aria-label="Rewind 5 seconds" onclick="nudge(-5)"></button>
+  <button type="button" class="fullscreen-tap-zone" aria-label="Skip forward 5 seconds" onclick="nudge(5)"></button>
+  <button type="button" class="fullscreen-tap-zone" aria-label="Previous cue" onclick="jumpCue(-1)"></button>
+  <button type="button" class="fullscreen-tap-zone" aria-label="Next cue" onclick="jumpCue(1)"></button>
+</div>
 
 <div class="sheet-backdrop" id="menuBackdrop" onclick="closeMenu()"></div>
 <div class="sheet-backdrop" id="panelBackdrop" onclick="closePanel()"></div>
@@ -410,13 +435,54 @@ const menuBackdrop = document.getElementById('menuBackdrop');
 const transcriptBackdrop = document.getElementById('transcriptBackdrop');
 const transcriptHeaderBtn = document.getElementById('transcriptHeaderBtn');
 const hamburgerBtn = document.getElementById('hamburgerBtn');
+const fullscreenBtn = document.getElementById('fullscreenBtn');
 const narrowMq = window.matchMedia('(max-width: 767px)');
 let errorTimeoutId;
 let srtLoadId = 0;
 let transcriptRows = [];
 let renderedTranscriptIdx = null;
+let fallbackFullscreen = false;
 
 function isNarrow() { return narrowMq.matches; }
+function isFullscreenActive() { return Boolean(document.fullscreenElement) || fallbackFullscreen; }
+
+function syncFullscreenUI() {
+  const active = isFullscreenActive();
+  document.body.classList.toggle('app-fullscreen', active);
+  fullscreenBtn.textContent = active ? '×' : '⛶';
+  fullscreenBtn.setAttribute('aria-label', active ? 'Exit full screen' : 'Enter full screen');
+  fullscreenBtn.title = active ? 'Exit full screen' : 'Enter full screen';
+}
+
+async function toggleFullscreen() {
+  if (isFullscreenActive()) {
+    if (document.fullscreenElement && document.exitFullscreen) {
+      try {
+        await document.exitFullscreen();
+      } catch {
+        showError('Could not exit full screen');
+      }
+    }
+    fallbackFullscreen = false;
+    syncFullscreenUI();
+    return;
+  }
+
+  closeMenu();
+  closePanel();
+  closeTranscriptSheet();
+  if (document.documentElement.requestFullscreen) {
+    try {
+      await document.documentElement.requestFullscreen();
+      syncFullscreenUI();
+      return;
+    } catch {
+      // Some mobile browsers do not allow arbitrary elements to enter native full screen.
+    }
+  }
+  fallbackFullscreen = true;
+  syncFullscreenUI();
+}
 
 function updateTranscriptUI() {
   const active = state.rail && state.cues.length > 0;
@@ -929,8 +995,13 @@ initDragDrop();
 
 // --- keyboard ---
 document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && fallbackFullscreen) {
+    fallbackFullscreen = false;
+    syncFullscreenUI();
+    return;
+  }
   const t = e.target.tagName;
-  if (t === 'INPUT' || t === 'SELECT') return;
+  if (t === 'INPUT' || t === 'SELECT' || t === 'BUTTON' || t === 'TEXTAREA') return;
   if (e.code === 'Space') { e.preventDefault(); togglePlay(); }
   else if (e.key === 'ArrowLeft') { e.preventDefault(); nudge(-5); }
   else if (e.key === 'ArrowRight') { e.preventDefault(); nudge(5); }
@@ -944,6 +1015,11 @@ narrowMq.addEventListener('change', () => {
   if (state.panelOpen) applyPanelState();
   rebuildRail();
   updateTranscriptUI();
+});
+
+document.addEventListener('fullscreenchange', () => {
+  if (!document.fullscreenElement) fallbackFullscreen = false;
+  syncFullscreenUI();
 });
 
 // init
