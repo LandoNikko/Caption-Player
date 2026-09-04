@@ -43,7 +43,7 @@
     .transcript-close { display: none; border: none; background: transparent; color: #6f757e; font-size: 22px; line-height: 1; padding: 4px 8px; min-width: 44px; min-height: 44px; margin-left: auto; }
     .transcript-close:hover { color: #e8e9ec; }
     .transcript-handle { display: none; width: 36px; height: 4px; border-radius: 2px; background: #2a2e36; margin: 10px auto 0; }
-    .cue-row { padding: 11px 20px; cursor: pointer; border-left: 2px solid transparent; transition: background 100ms; }
+    .cue-row { width: 100%; padding: 11px 20px; cursor: pointer; border: 0; border-left: 2px solid transparent; background: transparent; color: inherit; font: inherit; text-align: left; transition: background 100ms; }
     .cue-row:hover { background: #0f1318; }
     .cue-row.active { border-left-color: #86d7e2; background: #131a1d; color: #e8e9ec; }
     .cue-row.past { color: #5d636b; }
@@ -236,7 +236,6 @@
         transition: transform 220ms ease;
       }
       body.panel-open .style-panel { transform: translateY(0); }
-      body.panel-open .style-panel[style*="display: none"] { transform: translateY(105%); }
 
       .panel-header { margin-top: 4px; }
       .swatch { width: 40px; height: 36px; }
@@ -388,7 +387,7 @@ const EDGES = [['box', 'Box'], ['outline', 'Outline'], ['shadow', 'Shadow'], ['n
 const ALIGNS = [['left', 'Left'], ['center', 'Center'], ['right', 'Right']];
 
 let state = {
-  cues: [], audioSrc: '', audioName: '', srtName: '', playing: false,
+  cues: [], audioSrc: '', playing: false,
   time: 0, duration: 0, idx: -1,
   panelOpen: false, rail: true,
   cfg: { font: "'Helvetica Neue', Helvetica, sans-serif", size: 56, color: '#ffffff', edge: 'box', boxOpacity: 0.78, lh: 1.3, width: 80, align: 'center', caps: false }
@@ -396,7 +395,6 @@ let state = {
 
 const audio = document.getElementById('audio');
 const captionText = document.getElementById('captionText');
-const meterBar = document.getElementById('meterBar');
 const scrubTrack = document.getElementById('scrubTrack');
 const progress = document.getElementById('progress');
 const knob = document.getElementById('knob');
@@ -413,6 +411,10 @@ const transcriptBackdrop = document.getElementById('transcriptBackdrop');
 const transcriptHeaderBtn = document.getElementById('transcriptHeaderBtn');
 const hamburgerBtn = document.getElementById('hamburgerBtn');
 const narrowMq = window.matchMedia('(max-width: 767px)');
+let errorTimeoutId;
+let srtLoadId = 0;
+let transcriptRows = [];
+let renderedTranscriptIdx = null;
 
 function isNarrow() { return narrowMq.matches; }
 
@@ -489,32 +491,45 @@ function toggleTranscript() {
 // --- loading & parsing ---
 function loadAudio(file) {
   if (!file) return;
+  audio.pause();
+  audio.removeAttribute('src');
+  audio.load();
   if (state.audioSrc) URL.revokeObjectURL(state.audioSrc);
   state.audioSrc = URL.createObjectURL(file);
-  state.audioName = file.name;
   state.idx = -1;
   state.time = 0;
+  state.duration = 0;
   state.playing = false;
   audio.src = state.audioSrc;
+  audio.load();
   document.getElementById('audioLabel').textContent = file.name;
+  renderTicks();
+  render();
   errorEl.classList.remove('show');
 }
 
 function loadSrt(file) {
   if (!file) return;
+  const loadId = ++srtLoadId;
   const r = new FileReader();
   r.onload = () => {
+    if (loadId !== srtLoadId) return;
     const cues = parseSrt(String(r.result));
     if (!cues.length) {
       showError('No cues found in ' + file.name);
       return;
     }
     state.cues = cues;
-    state.srtName = file.name;
     state.idx = -1;
     document.getElementById('srtLabel').textContent = file.name;
     rebuildRail();
+    renderTicks();
+    updateCue();
+    render();
     errorEl.classList.remove('show');
+  };
+  r.onerror = () => {
+    if (loadId === srtLoadId) showError('Could not read ' + file.name);
   };
   r.readAsText(file);
 }
@@ -552,26 +567,33 @@ function togglePlay() {
 
 function nudge(d) { seek(state.time + d); }
 function seek(t) {
+  if (!Number.isFinite(state.duration) || state.duration <= 0) return;
   t = Math.max(0, Math.min(state.duration, t));
   audio.currentTime = t;
   state.time = t;
+  renderPlaybackUI();
   updateCue();
 }
 
 function jumpCue(dir) {
   const t = state.time;
   if (dir > 0) {
-    const n = state.cues.find((x) => x.start > t + 0.05);
+    const n = findCueAfter(t + 0.05);
     if (n) seek(n.start + 0.01);
   } else {
-    const past = state.cues.filter((x) => x.start < t - 0.35);
-    const p = past[past.length - 1];
+    const p = findCueBefore(t - 0.35);
     seek((p ? p.start : 0) + 0.01);
   }
 }
 
 // --- rendering ---
 function render() {
+  renderCaption();
+  renderPlaybackUI();
+  renderTranscript();
+}
+
+function renderCaption() {
   const s = state, c = s.cfg;
   const cur = s.idx >= 0 ? s.cues[s.idx] : null;
   let text = cur ? cur.text : '';
@@ -609,36 +631,29 @@ function render() {
   captionText.textContent = text;
   captionText.className = isIdle ? 'caption-text empty' : 'caption-text';
   Object.assign(captionText.style, styles);
+}
 
-  // progress bar
-  const frac = s.duration ? s.time / s.duration : 0;
+function renderPlaybackUI() {
+  const frac = state.duration ? Math.max(0, Math.min(1, state.time / state.duration)) : 0;
   progress.style.width = (frac * 100) + '%';
   knob.style.left = (frac * 100) + '%';
 
-  // clock
-  clock.textContent = fmt(s.time) + ' / ' + fmt(s.duration);
+  clock.textContent = fmt(state.time) + ' / ' + fmt(state.duration);
 
-  // play button
-  playBtn.textContent = s.playing ? '❙❙' : '▶';
-
-  // transcript
-  renderTranscript();
+  playBtn.textContent = state.playing ? '❙❙' : '▶';
 }
 
-
-
 function renderTranscript() {
-  const rail = document.getElementById('transcript');
-  if (!rail) return;
-  const rows = rail.querySelectorAll('.cue-row');
-  rows.forEach((row, i) => {
+  if (renderedTranscriptIdx === state.idx) return;
+  transcriptRows.forEach((row, i) => {
     row.classList.remove('active', 'past', 'future');
     if (i === state.idx) row.classList.add('active');
     else if (state.idx >= 0 && i < state.idx) row.classList.add('past');
     else row.classList.add('future');
   });
+  renderedTranscriptIdx = state.idx;
   if (state.idx >= 0 && state.playing) {
-    const active = rows[state.idx];
+    const active = transcriptRows[state.idx];
     if (active) active.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }
 }
@@ -647,13 +662,35 @@ function updateCue() {
   const t = state.time;
   let idx = -1;
   for (let i = 0; i < state.cues.length; i++) {
-    if (t >= state.cues[i].start && t <= state.cues[i].end) {
+    if (t >= state.cues[i].start && t < state.cues[i].end) {
       idx = i;
       break;
     }
   }
+  if (idx === state.idx) return;
   state.idx = idx;
-  render();
+  renderCaption();
+  renderTranscript();
+}
+
+function findCueAfter(time) {
+  let low = 0, high = state.cues.length;
+  while (low < high) {
+    const mid = low + Math.floor((high - low) / 2);
+    if (state.cues[mid].start > time) high = mid;
+    else low = mid + 1;
+  }
+  return state.cues[low];
+}
+
+function findCueBefore(time) {
+  let low = 0, high = state.cues.length;
+  while (low < high) {
+    const mid = low + Math.floor((high - low) / 2);
+    if (state.cues[mid].start < time) low = mid + 1;
+    else high = mid;
+  }
+  return state.cues[low - 1];
 }
 
 function fmt(t) {
@@ -709,6 +746,8 @@ function updateAlignButtons() {
 function rebuildRail() {
   const existing = document.getElementById('transcript');
   if (existing) existing.remove();
+  transcriptRows = [];
+  renderedTranscriptIdx = null;
 
   if (state.rail && state.cues.length) {
     main.classList.toggle('with-rail', !isNarrow());
@@ -716,22 +755,39 @@ function rebuildRail() {
     t.id = 'transcript';
     t.className = 'transcript';
     if (isNarrow()) {
-      t.innerHTML =
-        '<div class="transcript-handle" aria-hidden="true"></div>' +
-        '<div class="transcript-top">' +
-        '<button class="transcript-close" type="button" aria-label="Close transcript" onclick="closeTranscriptSheet()">×</button></div>';
+      const handle = document.createElement('div');
+      handle.className = 'transcript-handle';
+      handle.setAttribute('aria-hidden', 'true');
+      const top = document.createElement('div');
+      top.className = 'transcript-top';
+      const closeButton = document.createElement('button');
+      closeButton.className = 'transcript-close';
+      closeButton.type = 'button';
+      closeButton.setAttribute('aria-label', 'Close transcript');
+      closeButton.textContent = '×';
+      closeButton.addEventListener('click', closeTranscriptSheet);
+      top.append(handle, closeButton);
+      t.append(top);
     }
     state.cues.forEach((cue, i) => {
-      const row = document.createElement('div');
+      const row = document.createElement('button');
+      row.type = 'button';
       row.className = 'cue-row';
       if (i === state.idx) row.classList.add('active');
       else if (state.idx >= 0 && i < state.idx) row.classList.add('past');
       else row.classList.add('future');
-      row.onclick = () => {
+      row.addEventListener('click', () => {
         seek(cue.start + 0.01);
         if (isNarrow()) closeTranscriptSheet();
-      };
-      row.innerHTML = '<div class="cue-stamp">' + fmt(cue.start) + '</div><div class="cue-text">' + cue.text + '</div>';
+      });
+      const stamp = document.createElement('div');
+      stamp.className = 'cue-stamp';
+      stamp.textContent = fmt(cue.start);
+      const text = document.createElement('div');
+      text.className = 'cue-text';
+      text.textContent = cue.text;
+      row.append(stamp, text);
+      transcriptRows.push(row);
       t.appendChild(row);
     });
     main.appendChild(t);
@@ -743,9 +799,10 @@ function rebuildRail() {
 }
 
 function showError(msg) {
+  window.clearTimeout(errorTimeoutId);
   errorEl.textContent = msg;
   errorEl.classList.add('show');
-  setTimeout(() => errorEl.classList.remove('show'), 4000);
+  errorTimeoutId = window.setTimeout(() => errorEl.classList.remove('show'), 4000);
 }
 
 // --- setup ---
@@ -786,18 +843,24 @@ function initAlignButtons() {
 // --- audio events ---
 audio.addEventListener('timeupdate', () => {
   state.time = audio.currentTime;
+  renderPlaybackUI();
   updateCue();
 });
 
 audio.addEventListener('loadedmetadata', () => {
-  state.duration = audio.duration;
+  state.duration = Number.isFinite(audio.duration) ? audio.duration : 0;
+  state.time = audio.currentTime || 0;
   renderTicks();
-  render();
+  updateCue();
+  renderPlaybackUI();
 });
 
 audio.addEventListener('play', () => { state.playing = true; render(); });
 audio.addEventListener('pause', () => { state.playing = false; render(); });
 audio.addEventListener('ended', () => { state.playing = false; render(); });
+audio.addEventListener('error', () => {
+  if (audio.error) showError('Could not load ' + document.getElementById('audioLabel').textContent);
+});
 
 // --- scrubbing ---
 scrubTrack.addEventListener('pointerdown', (e) => {
@@ -821,14 +884,19 @@ scrubTrack.addEventListener('pointerdown', (e) => {
 });
 
 function renderTicks() {
-  ticksContainer.innerHTML = '';
-  if (!state.duration) return;
-  state.cues.forEach((cue) => {
+  ticksContainer.replaceChildren();
+  if (!state.duration || !state.cues.length) return;
+  const fragment = document.createDocumentFragment();
+  const stride = Math.ceil(state.cues.length / 300);
+  for (let i = 0; i < state.cues.length; i += stride) {
+    const cue = state.cues[i];
+    if (cue.start > state.duration) continue;
     const el = document.createElement('div');
     el.className = 'tick';
     el.style.left = (cue.start / state.duration) * 100 + '%';
-    ticksContainer.appendChild(el);
-  });
+    fragment.appendChild(el);
+  }
+  ticksContainer.appendChild(fragment);
 }
 
 // --- drag & drop (desktop / fine pointer only) ---
