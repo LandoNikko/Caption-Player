@@ -2,12 +2,14 @@ const COLORS = [['#ffffff', 'White'], ['#ffe23d', 'Yellow'], ['#5ee0f0', 'Cyan']
 const EDGES = [['box', 'Box'], ['outline', 'Outline'], ['shadow', 'Shadow'], ['none', 'None']];
 // Catppuccin Mocha accent hues — muted pastels that read clearly on the dark chat rail.
 const CHAT_COLORS = ['#f5e0dc', '#f2cdcd', '#f5c2e7', '#cba6f7', '#f38ba8', '#eba0ac', '#fab387', '#f9e2af', '#a6e3a1', '#94e2d5', '#89dceb', '#74c7ec', '#89b4fa', '#b4befe'];
+const CHAT_USERNAME_MODES = ['on', 'colored', 'off'];
+const CHAT_USERNAME_LABELS = { on: 'On', colored: 'Colored', off: 'Off' };
 
 let state = {
   cues: [], audioSrc: '', playing: false,
   time: 0, duration: 0, idx: -1,
   panelOpen: false, rail: true,
-  chat: [], chatIdx: -1, chatRail: true,
+  chat: [], chatIdx: -1, chatRail: true, chatUsernameMode: 'on',
   cfg: { font: "'Helvetica Neue', Helvetica, sans-serif", size: 56, color: '#ffffff', edge: 'box', boxOpacity: 0.78, lh: 1.3, width: 80, align: 'center', caps: false }
 };
 
@@ -519,6 +521,20 @@ function toggleChatRail() {
   rebuildChatRail();
   updateChatUI();
 }
+
+function cycleChatUsernameMode() {
+  const next = CHAT_USERNAME_MODES[(CHAT_USERNAME_MODES.indexOf(state.chatUsernameMode) + 1) % CHAT_USERNAME_MODES.length];
+  state.chatUsernameMode = next;
+  document.getElementById('chatUsernamesBtn').textContent = CHAT_USERNAME_LABELS[next];
+  applyChatUsernameMode();
+}
+
+function applyChatUsernameMode() {
+  const chatEl = document.getElementById('chat');
+  if (!chatEl) return;
+  chatEl.classList.toggle('hide-usernames', state.chatUsernameMode !== 'on');
+  chatEl.classList.toggle('chat-colored-text', state.chatUsernameMode === 'colored');
+}
 function togglePanel() {
   state.panelOpen = !state.panelOpen;
   if (state.panelOpen) { closeTranscriptSheet(); closeChatSheet(); }
@@ -603,6 +619,8 @@ function rebuildChatRail() {
     const t = document.createElement('aside');
     t.id = 'chat';
     t.className = 'chat';
+    t.classList.toggle('hide-usernames', state.chatUsernameMode !== 'on');
+    t.classList.toggle('chat-colored-text', state.chatUsernameMode === 'colored');
     if (isNarrow()) {
       const handle = document.createElement('div');
       handle.className = 'chat-handle';
@@ -629,12 +647,14 @@ function rebuildChatRail() {
         seek(msg.start + 0.01);
         if (isNarrow()) closeChatSheet();
       });
+      const userColor = colorForUser(msg.user);
       const user = document.createElement('div');
       user.className = 'chat-user';
-      user.style.color = colorForUser(msg.user);
+      user.style.color = userColor;
       user.textContent = msg.user;
       const body = document.createElement('div');
       body.className = 'chat-text';
+      body.style.setProperty('--user-color', userColor);
       body.textContent = msg.text;
       row.append(user, body);
       chatRows.push(row);

@@ -61,6 +61,8 @@ main.with-rail.with-chat { grid-template-columns: 340px 1fr 340px; }
 .chat-row.future { opacity: 0.3; }
 .chat-user { font-size: 13px; font-weight: 700; margin-bottom: 1px; }
 .chat-text { font-size: 14px; line-height: 1.3; color: #d7d9dd; }
+.chat.hide-usernames .chat-user { display: none; }
+.chat.chat-colored-text .chat-text { color: var(--user-color); }
 
 footer { border-top: 1px solid #1e2127; background: #0f1115; min-height: 0; }
 .scrub-track { position: relative; height: 26px; cursor: pointer; display: flex; align-items: center; padding: 0 28px; }
