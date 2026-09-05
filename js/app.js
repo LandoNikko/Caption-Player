@@ -1,15 +1,19 @@
-const COLORS = [['#ffffff', 'White'], ['#ffe23d', 'Yellow'], ['#5ee0f0', 'Cyan'], ['#8ef58e', 'Green'], ['#0c0d10', 'Black']];
+const COLORS = [['#ffffff', 'White'], ['#ffe23d', 'Yellow']];
 const EDGES = [['box', 'Box'], ['outline', 'Outline'], ['shadow', 'Shadow'], ['none', 'None']];
 // Catppuccin Mocha accent hues — muted pastels that read clearly on the dark chat rail.
 const CHAT_COLORS = ['#f5e0dc', '#f2cdcd', '#f5c2e7', '#cba6f7', '#f38ba8', '#eba0ac', '#fab387', '#f9e2af', '#a6e3a1', '#94e2d5', '#89dceb', '#74c7ec', '#89b4fa', '#b4befe'];
 const CHAT_USERNAME_MODES = ['on', 'colored', 'off'];
 const CHAT_USERNAME_LABELS = { on: 'On', colored: 'Colored', off: 'Off' };
+// SVG icons render consistently everywhere; the Unicode glyphs they replace look uneven on iOS Safari.
+const PLAY_ICON = '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><polygon points="6,4 20,12 6,20"></polygon></svg>';
+const PAUSE_ICON = '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><rect x="6" y="4" width="4" height="16" rx="1"></rect><rect x="14" y="4" width="4" height="16" rx="1"></rect></svg>';
 
 let state = {
   cues: [], audioSrc: '', playing: false,
   time: 0, duration: 0, idx: -1,
   panelOpen: false, rail: true,
   chat: [], chatIdx: -1, chatRail: true, chatUsernameMode: 'on',
+  audioFileName: '',
   cfg: { font: "'Helvetica Neue', Helvetica, sans-serif", size: 56, color: '#ffffff', edge: 'box', boxOpacity: 0.78, lh: 1.3, width: 80, align: 'center', caps: false }
 };
 
@@ -17,7 +21,6 @@ const audio = document.getElementById('audio');
 const captionText = document.getElementById('captionText');
 const scrubTrack = document.getElementById('scrubTrack');
 const progress = document.getElementById('progress');
-const knob = document.getElementById('knob');
 const ticksContainer = document.getElementById('ticksContainer');
 const clock = document.getElementById('clock');
 const playBtn = document.getElementById('playBtn');
@@ -32,7 +35,10 @@ const transcriptHeaderBtn = document.getElementById('transcriptHeaderBtn');
 const chatBackdrop = document.getElementById('chatBackdrop');
 const chatHeaderBtn = document.getElementById('chatHeaderBtn');
 const hamburgerBtn = document.getElementById('hamburgerBtn');
+const uploadsDropdown = document.getElementById('uploadsDropdown');
+const uploadsHeaderBtn = document.getElementById('uploadsHeaderBtn');
 const fullscreenBtn = document.getElementById('fullscreenBtn');
+const footerEl = document.querySelector('footer');
 const narrowMq = window.matchMedia('(max-width: 767px)');
 let errorTimeoutId;
 let srtLoadId = 0;
@@ -113,6 +119,18 @@ function closeMenu() {
   menuBackdrop.classList.remove('show');
   hamburgerBtn.setAttribute('aria-expanded', 'false');
   hamburgerBtn.setAttribute('aria-label', 'Open menu');
+  closeUploadsMenu();
+}
+
+function toggleUploadsMenu() {
+  const open = !uploadsDropdown.classList.contains('show');
+  uploadsDropdown.classList.toggle('show', open);
+  uploadsHeaderBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+}
+
+function closeUploadsMenu() {
+  uploadsDropdown.classList.remove('show');
+  uploadsHeaderBtn.setAttribute('aria-expanded', 'false');
 }
 
 function applyPanelState() {
@@ -210,6 +228,7 @@ function loadAudio(file) {
   audio.load();
   if (state.audioSrc) URL.revokeObjectURL(state.audioSrc);
   state.audioSrc = URL.createObjectURL(file);
+  state.audioFileName = file.name;
   state.idx = -1;
   state.time = 0;
   state.duration = 0;
@@ -380,7 +399,6 @@ function renderCaption() {
     color: isIdle ? '#565c65' : c.color,
     maxWidth: c.width + '%',
     whiteSpace: 'pre-wrap',
-    textWrap: 'pretty',
     fontWeight: 500,
     letterSpacing: c.caps ? '0.02em' : '0',
     padding: (c.edge === 'box' && !isIdle) ? '0.35em 0.6em' : '0',
@@ -406,11 +424,10 @@ function renderCaption() {
 function renderPlaybackUI() {
   const frac = state.duration ? Math.max(0, Math.min(1, state.time / state.duration)) : 0;
   progress.style.width = (frac * 100) + '%';
-  knob.style.left = (frac * 100) + '%';
 
   clock.textContent = fmt(state.time) + ' / ' + fmt(state.duration);
 
-  playBtn.textContent = state.playing ? '❙❙' : '▶';
+  playBtn.innerHTML = state.playing ? PAUSE_ICON : PLAY_ICON;
 }
 
 function renderTranscript() {
@@ -430,13 +447,15 @@ function renderTranscript() {
 
 function updateCue() {
   const t = state.time;
-  let idx = -1;
-  for (let i = 0; i < state.cues.length; i++) {
-    if (t >= state.cues[i].start && t < state.cues[i].end) {
-      idx = i;
-      break;
-    }
+  let low = 0, high = state.cues.length;
+  while (low < high) {
+    const mid = low + Math.floor((high - low) / 2);
+    if (state.cues[mid].start <= t) low = mid + 1;
+    else high = mid;
   }
+  const candidateIdx = low - 1;
+  const candidate = state.cues[candidateIdx];
+  const idx = (candidate && t < candidate.end) ? candidateIdx : -1;
   if (idx === state.idx) return;
   state.idx = idx;
   renderCaption();
@@ -542,9 +561,17 @@ function togglePanel() {
 }
 
 function updateColorSwatches() {
-  document.querySelectorAll('.swatch').forEach((el, i) => {
-    el.className = 'swatch' + (COLORS[i][0] === state.cfg.color ? ' active' : '');
+  const isPreset = COLORS.some(([color]) => color === state.cfg.color);
+  document.querySelectorAll('#colorSwatches .swatch:not(.swatch-custom)').forEach((el, i) => {
+    el.classList.toggle('active', COLORS[i][0] === state.cfg.color);
   });
+  const customBtn = document.querySelector('#colorSwatches .swatch-custom');
+  const customInput = document.getElementById('customColorInput');
+  if (customBtn) {
+    customBtn.classList.toggle('active', !isPreset);
+    customBtn.style.background = isPreset ? '' : state.cfg.color;
+  }
+  if (customInput && !isPreset) customInput.value = state.cfg.color;
 }
 
 function updateEdgeButtons() {
@@ -680,12 +707,27 @@ function initColorSwatches() {
   const container = document.getElementById('colorSwatches');
   COLORS.forEach(([color, name]) => {
     const btn = document.createElement('button');
-    btn.className = 'swatch' + (color === state.cfg.color ? ' active' : '');
+    btn.className = 'swatch';
     btn.style.background = color;
     btn.setAttribute('aria-label', name + ' caption text');
     btn.onclick = () => setColor(color);
     container.appendChild(btn);
   });
+
+  const customInput = document.createElement('input');
+  customInput.type = 'color';
+  customInput.id = 'customColorInput';
+  customInput.value = state.cfg.color;
+  customInput.oninput = (e) => setColor(e.target.value);
+  container.appendChild(customInput);
+
+  const customBtn = document.createElement('button');
+  customBtn.className = 'swatch swatch-custom';
+  customBtn.setAttribute('aria-label', 'Custom caption text color');
+  customBtn.onclick = () => customInput.click();
+  container.appendChild(customBtn);
+
+  updateColorSwatches();
 }
 
 function initEdgeButtons() {
@@ -720,7 +762,7 @@ audio.addEventListener('play', () => { state.playing = true; render(); });
 audio.addEventListener('pause', () => { state.playing = false; render(); });
 audio.addEventListener('ended', () => { state.playing = false; render(); });
 audio.addEventListener('error', () => {
-  if (audio.error) showError('Could not load ' + document.getElementById('audioLabel').textContent);
+  if (audio.error) showError('Could not load ' + state.audioFileName);
 });
 
 // --- scrubbing ---
@@ -802,6 +844,23 @@ function routeTxtFile(file) {
 }
 
 initDragDrop();
+
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.nav-uploads')) closeUploadsMenu();
+});
+
+// Keeps --footer-h in sync with the footer's real rendered height (it changes between
+// normal/fullscreen and desktop/mobile), so the transcript/chat rails can reserve exactly
+// enough space to never sit underneath it, at any scroll position.
+function updateFooterHeightVar() {
+  document.documentElement.style.setProperty('--footer-h', footerEl.getBoundingClientRect().height + 'px');
+}
+if (window.ResizeObserver) {
+  new ResizeObserver(updateFooterHeightVar).observe(footerEl);
+} else {
+  window.addEventListener('resize', updateFooterHeightVar);
+  updateFooterHeightVar();
+}
 
 // --- keyboard ---
 document.addEventListener('keydown', (e) => {

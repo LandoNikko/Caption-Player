@@ -13,21 +13,39 @@
     <span></span><span></span><span></span>
   </button>
   <div class="header-menu" id="headerMenu">
-    <button class="file-btn" id="audioHeaderBtn" onclick="closeMenu(); document.getElementById('audioInput').click()">
-      <span>Audio file</span>
-      <span class="file-check" id="audioLabel"></span>
-    </button>
-    <button class="file-btn" id="srtHeaderBtn" onclick="closeMenu(); document.getElementById('srtInput').click()">
-      <span>.srt file</span>
-      <span class="file-check" id="srtLabel"></span>
-    </button>
-    <button class="file-btn" id="transcriptHeaderBtn" onclick="toggleTranscript()" disabled>Transcript</button>
-    <button class="file-btn" id="chatFileHeaderBtn" onclick="closeMenu(); document.getElementById('chatInput').click()">
-      <span>Chat</span>
-      <span class="file-check" id="chatLabel"></span>
-    </button>
-    <button class="file-btn" id="chatHeaderBtn" onclick="toggleChat()" disabled>Chat</button>
-    <button class="file-btn" onclick="closeMenu(); togglePanel()">Style</button>
+    <div class="nav-group nav-uploads">
+      <button class="file-btn" id="uploadsHeaderBtn" onclick="toggleUploadsMenu()" aria-haspopup="true" aria-expanded="false">
+        <span>Files</span>
+        <span class="dropdown-caret" aria-hidden="true">▾</span>
+      </button>
+      <div class="uploads-dropdown" id="uploadsDropdown">
+        <button class="file-btn" id="audioHeaderBtn" onclick="closeMenu(); document.getElementById('audioInput').click()">
+          <span>Audio file</span>
+          <span class="file-check" id="audioLabel"></span>
+        </button>
+        <button class="file-btn" id="srtHeaderBtn" onclick="closeMenu(); document.getElementById('srtInput').click()">
+          <span>.srt file</span>
+          <span class="file-check" id="srtLabel"></span>
+        </button>
+        <button class="file-btn" id="chatFileHeaderBtn" onclick="closeMenu(); document.getElementById('chatInput').click()">
+          <span>Chat</span>
+          <span class="file-check" id="chatLabel"></span>
+        </button>
+      </div>
+    </div>
+
+    <div class="nav-divider" aria-hidden="true"></div>
+
+    <div class="nav-group nav-sidebars">
+      <button class="file-btn" id="transcriptHeaderBtn" onclick="toggleTranscript()" disabled>Transcript</button>
+      <button class="file-btn" id="chatHeaderBtn" onclick="toggleChat()" disabled>Chat</button>
+    </div>
+
+    <div class="nav-divider" aria-hidden="true"></div>
+
+    <div class="nav-group nav-settings">
+      <button class="file-btn" onclick="closeMenu(); togglePanel()">Settings</button>
+    </div>
   </div>
 </header>
 <button type="button" class="fullscreen-btn" id="fullscreenBtn" aria-label="Enter full screen" title="Enter full screen" onclick="toggleFullscreen()">⛶</button>
@@ -45,27 +63,20 @@
   <div class="scrub-track" id="scrubTrack">
     <div class="scrub-bar">
       <div class="progress" id="progress"></div>
-      <div class="knob" id="knob"></div>
       <div id="ticksContainer"></div>
     </div>
   </div>
   <div class="transport">
-    <div class="transport-seek">
-      <button class="transport-btn" onclick="nudge(-5)">−5s</button>
-      <button class="transport-btn" onclick="nudge(5)">+5s</button>
-    </div>
-    <button class="play-btn" id="playBtn" onclick="togglePlay()" aria-label="Play or pause">▶</button>
-    <div class="transport-cue">
-      <button class="transport-btn" onclick="jumpCue(-1)">◂ cue</button>
-      <button class="transport-btn" onclick="jumpCue(1)">cue ▸</button>
-    </div>
     <div class="clock" id="clock">0:00 / 0:00</div>
+    <div class="transport-controls">
+      <button class="transport-btn cue-btn" onclick="jumpCue(-1)">◂ cue</button>
+      <button class="play-btn" id="playBtn" onclick="togglePlay()" aria-label="Play or pause"><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><polygon points="6,4 20,12 6,20"></polygon></svg></button>
+      <button class="transport-btn cue-btn" onclick="jumpCue(1)">cue ▸</button>
+    </div>
   </div>
 </footer>
 
 <div class="fullscreen-tap-zones" id="fullscreenTapZones" aria-label="Full screen playback controls">
-  <button type="button" class="fullscreen-tap-zone" aria-label="Rewind 5 seconds" onclick="nudge(-5)"></button>
-  <button type="button" class="fullscreen-tap-zone" aria-label="Skip forward 5 seconds" onclick="nudge(5)"></button>
   <button type="button" class="fullscreen-tap-zone" aria-label="Previous cue" onclick="jumpCue(-1)"></button>
   <button type="button" class="fullscreen-tap-zone" aria-label="Next cue" onclick="jumpCue(1)"></button>
 </div>
@@ -77,8 +88,8 @@
 
 <div class="style-panel" id="stylePanel" style="display: none;">
   <div class="panel-header">
-    <div class="panel-title">Caption style</div>
-    <button class="close-btn" aria-label="Close style panel" onclick="togglePanel()">×</button>
+    <div class="panel-title">Settings</div>
+    <button class="close-btn" aria-label="Close settings panel" onclick="togglePanel()">×</button>
   </div>
   <div class="panel-section">
 
@@ -129,7 +140,7 @@
       <button class="style-btn toggle-btn" id="chatUsernamesBtn" onclick="cycleChatUsernameMode()">On</button>
     </div>
 
-    <div class="panel-divider">Use the file buttons above to load audio, subtitles, and chat.<br><span class="desktop-hint">Desktop: drag files onto the page · SPACE play/pause · arrows seek & jump cues</span></div>
+    <div class="panel-divider">Use the file buttons above to load audio, subtitles, and chat.</div>
   </div>
 </div>
 
