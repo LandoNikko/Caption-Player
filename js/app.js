@@ -1,6 +1,6 @@
 const COLORS = [['#ffffff', 'White'], ['#ffe23d', 'Yellow']];
 const EDGES = [['box', 'Box'], ['outline', 'Outline'], ['shadow', 'Shadow'], ['none', 'None']];
-// Catppuccin Mocha accent hues — muted pastels that read clearly on the dark chat rail.
+// Catppuccin Mocha accent hues.
 const CHAT_COLORS = ['#f5e0dc', '#f2cdcd', '#f5c2e7', '#cba6f7', '#f38ba8', '#eba0ac', '#fab387', '#f9e2af', '#a6e3a1', '#94e2d5', '#89dceb', '#74c7ec', '#89b4fa', '#b4befe'];
 const CHAT_USERNAME_MODES = ['on', 'colored', 'off'];
 const CHAT_USERNAME_LABELS = { on: 'On', colored: 'Colored', off: 'Off' };
@@ -14,7 +14,7 @@ let state = {
   panelOpen: false, rail: true,
   chat: [], chatIdx: -1, chatRail: true, chatUsernameMode: 'on',
   audioFileName: '',
-  cfg: { font: "'Helvetica Neue', Helvetica, sans-serif", size: 56, color: '#ffffff', edge: 'box', boxOpacity: 0.78, lh: 1.3, width: 80, align: 'center', caps: false }
+  cfg: { font: "'Helvetica Neue', Helvetica, sans-serif", size: 56, color: '#ffffff', edge: 'box', boxOpacity: 0.78, lh: 1.3, width: 92, align: 'center', caps: false }
 };
 
 const audio = document.getElementById('audio');
@@ -30,10 +30,8 @@ const dragOverlay = document.getElementById('dragOverlay');
 const errorEl = document.getElementById('error');
 const panelBackdrop = document.getElementById('panelBackdrop');
 const menuBackdrop = document.getElementById('menuBackdrop');
-const transcriptBackdrop = document.getElementById('transcriptBackdrop');
-const transcriptHeaderBtn = document.getElementById('transcriptHeaderBtn');
-const chatBackdrop = document.getElementById('chatBackdrop');
-const chatHeaderBtn = document.getElementById('chatHeaderBtn');
+const transcriptHandleBtn = document.getElementById('transcriptHandleBtn');
+const chatHandleBtn = document.getElementById('chatHandleBtn');
 const hamburgerBtn = document.getElementById('hamburgerBtn');
 const uploadsDropdown = document.getElementById('uploadsDropdown');
 const uploadsHeaderBtn = document.getElementById('uploadsHeaderBtn');
@@ -48,6 +46,15 @@ let renderedTranscriptIdx = null;
 let chatRows = [];
 let renderedChatIdx = null;
 let fallbackFullscreen = false;
+const panelLabelTimeouts = {};
+
+function flashPanelLabel(id) {
+  const label = document.querySelector('#' + id + ' .panel-label');
+  if (!label) return;
+  label.classList.add('show');
+  window.clearTimeout(panelLabelTimeouts[id]);
+  panelLabelTimeouts[id] = window.setTimeout(() => label.classList.remove('show'), 1000);
+}
 
 function isNarrow() { return narrowMq.matches; }
 function isFullscreenActive() { return Boolean(document.fullscreenElement) || fallbackFullscreen; }
@@ -94,15 +101,15 @@ async function toggleFullscreen() {
 function updateTranscriptUI() {
   const active = state.rail && state.cues.length > 0;
   const sheetOpen = main.classList.contains('transcript-open');
-  transcriptHeaderBtn.disabled = !state.cues.length;
-  transcriptHeaderBtn.classList.toggle('active', isNarrow() ? sheetOpen : active);
+  transcriptHandleBtn.disabled = !state.cues.length;
+  transcriptHandleBtn.classList.toggle('active', isNarrow() ? sheetOpen : active);
 }
 
 function updateChatUI() {
   const active = state.chatRail && state.chat.length > 0;
   const sheetOpen = main.classList.contains('chat-open');
-  chatHeaderBtn.disabled = !state.chat.length;
-  chatHeaderBtn.classList.toggle('active', isNarrow() ? sheetOpen : active);
+  chatHandleBtn.disabled = !state.chat.length;
+  chatHandleBtn.classList.toggle('active', isNarrow() ? sheetOpen : active);
 }
 
 function toggleMenu() {
@@ -149,7 +156,6 @@ function closePanel() {
 function closeTranscriptSheet() {
   main.classList.remove('transcript-open');
   document.body.classList.remove('transcript-open');
-  transcriptBackdrop.classList.remove('show');
   updateTranscriptUI();
 }
 
@@ -160,19 +166,20 @@ function toggleTranscript() {
   }
   closeMenu();
   if (isNarrow()) {
-    if (!state.rail) {
+    const justBuilt = !state.rail;
+    if (justBuilt) {
       state.rail = true;
       document.getElementById('railBtn').textContent = 'On';
-      rebuildRail();
+      rebuildRail(); // already flashes the label itself, so skip the direct call below
     }
     const open = !main.classList.contains('transcript-open');
     if (open) {
       if (state.panelOpen) closePanel();
       closeChatSheet();
+      if (!justBuilt) flashPanelLabel('transcript');
     }
     main.classList.toggle('transcript-open', open);
     document.body.classList.toggle('transcript-open', open);
-    transcriptBackdrop.classList.toggle('show', open);
     updateTranscriptUI();
     return;
   }
@@ -186,7 +193,6 @@ function toggleTranscript() {
 function closeChatSheet() {
   main.classList.remove('chat-open');
   document.body.classList.remove('chat-open');
-  chatBackdrop.classList.remove('show');
   updateChatUI();
 }
 
@@ -197,19 +203,20 @@ function toggleChat() {
   }
   closeMenu();
   if (isNarrow()) {
-    if (!state.chatRail) {
+    const justBuilt = !state.chatRail;
+    if (justBuilt) {
       state.chatRail = true;
       document.getElementById('chatRailBtn').textContent = 'On';
-      rebuildChatRail();
+      rebuildChatRail(); // already flashes the label itself, so skip the direct call below
     }
     const open = !main.classList.contains('chat-open');
     if (open) {
       if (state.panelOpen) closePanel();
       closeTranscriptSheet();
+      if (!justBuilt) flashPanelLabel('chat');
     }
     main.classList.toggle('chat-open', open);
     document.body.classList.toggle('chat-open', open);
-    chatBackdrop.classList.toggle('show', open);
     updateChatUI();
     return;
   }
@@ -389,7 +396,6 @@ function renderCaption() {
   if (!text) text = s.playing ? '' : '·';
   if (c.caps && cur) text = text.toUpperCase();
 
-  // caption styling
   const isIdle = !cur;
   const styles = {
     fontSize: (isIdle ? Math.min(24, c.size) : c.size) + 'px',
@@ -521,11 +527,69 @@ function fmt(t) {
 }
 
 // --- settings ---
-function setFont(f) { state.cfg.font = f; render(); }
-function setSize(v) { state.cfg.size = parseInt(v, 10); document.getElementById('sizeValue').textContent = v + 'px'; render(); }
-function setColor(c) { state.cfg.color = c; render(); updateColorSwatches(); }
-function setEdge(e) { state.cfg.edge = e; render(); updateEdgeButtons(); }
-function setOpacity(o) { state.cfg.boxOpacity = parseFloat(o); document.getElementById('opacityValue').textContent = Math.round(parseFloat(o) * 100) + '%'; render(); }
+const SETTINGS_STORAGE_KEY = 'caption-player-settings';
+
+// Keeps a range input's fill bar (see input[type=range] in styles.css) in sync with its value.
+function updateSliderFill(slider) {
+  const min = parseFloat(slider.min), max = parseFloat(slider.max);
+  const pct = ((parseFloat(slider.value) - min) / (max - min)) * 100;
+  slider.style.setProperty('--fill', pct + '%');
+}
+
+// localStorage can throw (disabled, private browsing, quota) - settings just won't persist then.
+function saveSettings() {
+  try {
+    localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify({ cfg: state.cfg, chatUsernameMode: state.chatUsernameMode }));
+  } catch {}
+}
+
+// Restores cfg/chatUsernameMode from a prior session, then syncs each control's displayed value -
+// needed since these are static HTML with hardcoded defaults, unlike e.g. the color swatches.
+function applySavedSettings() {
+  let saved = null;
+  try {
+    saved = JSON.parse(localStorage.getItem(SETTINGS_STORAGE_KEY));
+  } catch {}
+  if (saved && saved.cfg) Object.assign(state.cfg, saved.cfg);
+  if (saved && saved.chatUsernameMode) state.chatUsernameMode = saved.chatUsernameMode;
+
+  document.getElementById('fontSelect').value = state.cfg.font;
+
+  const sizeSlider = document.getElementById('sizeSlider');
+  sizeSlider.value = state.cfg.size;
+  document.getElementById('sizeValue').textContent = state.cfg.size + 'px';
+  updateSliderFill(sizeSlider);
+
+  const opacitySlider = document.getElementById('opacitySlider');
+  opacitySlider.value = state.cfg.boxOpacity;
+  document.getElementById('opacityValue').textContent = Math.round(state.cfg.boxOpacity * 100) + '%';
+  updateSliderFill(opacitySlider);
+
+  const widthSlider = document.getElementById('widthSlider');
+  widthSlider.value = state.cfg.width;
+  document.getElementById('widthValue').textContent = state.cfg.width + '%';
+  updateSliderFill(widthSlider);
+
+  document.getElementById('chatUsernamesBtn').textContent = CHAT_USERNAME_LABELS[state.chatUsernameMode];
+}
+
+function setFont(f) { state.cfg.font = f; render(); saveSettings(); }
+function setSize(v) { state.cfg.size = parseInt(v, 10); document.getElementById('sizeValue').textContent = v + 'px'; updateSliderFill(document.getElementById('sizeSlider')); render(); saveSettings(); }
+function setColor(c) { state.cfg.color = c; render(); updateColorSwatches(); saveSettings(); }
+function setEdge(e) { state.cfg.edge = e; render(); updateEdgeButtons(); saveSettings(); }
+function setOpacity(o) { state.cfg.boxOpacity = parseFloat(o); document.getElementById('opacityValue').textContent = Math.round(parseFloat(o) * 100) + '%'; updateSliderFill(document.getElementById('opacitySlider')); render(); saveSettings(); }
+function setWidth(w) { state.cfg.width = parseInt(w, 10); document.getElementById('widthValue').textContent = w + '%'; updateSliderFill(document.getElementById('widthSlider')); render(); saveSettings(); }
+
+function stepSlider(id, dir) {
+  const slider = document.getElementById(id);
+  const min = parseFloat(slider.min);
+  const max = parseFloat(slider.max);
+  const step = parseFloat(slider.step) || 1;
+  const decimals = (slider.step.split('.')[1] || '').length;
+  const value = Math.min(max, Math.max(min, parseFloat(slider.value) + dir * step));
+  slider.value = decimals ? value.toFixed(decimals) : value;
+  slider.dispatchEvent(new Event('change'));
+}
 function toggleRail() {
   state.rail = !state.rail;
   document.getElementById('railBtn').textContent = state.rail ? 'On' : 'Off';
@@ -546,6 +610,7 @@ function cycleChatUsernameMode() {
   state.chatUsernameMode = next;
   document.getElementById('chatUsernamesBtn').textContent = CHAT_USERNAME_LABELS[next];
   applyChatUsernameMode();
+  saveSettings();
 }
 
 function applyChatUsernameMode() {
@@ -591,21 +656,12 @@ function rebuildRail() {
     const t = document.createElement('aside');
     t.id = 'transcript';
     t.className = 'transcript';
-    if (isNarrow()) {
-      const handle = document.createElement('div');
-      handle.className = 'transcript-handle';
-      handle.setAttribute('aria-hidden', 'true');
-      const top = document.createElement('div');
-      top.className = 'transcript-top';
-      const closeButton = document.createElement('button');
-      closeButton.className = 'transcript-close';
-      closeButton.type = 'button';
-      closeButton.setAttribute('aria-label', 'Close transcript');
-      closeButton.textContent = '×';
-      closeButton.addEventListener('click', closeTranscriptSheet);
-      top.append(handle, closeButton);
-      t.append(top);
-    }
+    const label = document.createElement('div');
+    label.className = 'panel-label';
+    const labelText = document.createElement('span');
+    labelText.textContent = 'Transcription';
+    label.appendChild(labelText);
+    t.appendChild(label);
     state.cues.forEach((cue, i) => {
       const row = document.createElement('button');
       row.type = 'button';
@@ -628,6 +684,7 @@ function rebuildRail() {
       t.appendChild(row);
     });
     main.appendChild(t);
+    flashPanelLabel('transcript');
   } else {
     main.classList.remove('with-rail');
     closeTranscriptSheet();
@@ -648,21 +705,12 @@ function rebuildChatRail() {
     t.className = 'chat';
     t.classList.toggle('hide-usernames', state.chatUsernameMode !== 'on');
     t.classList.toggle('chat-colored-text', state.chatUsernameMode === 'colored');
-    if (isNarrow()) {
-      const handle = document.createElement('div');
-      handle.className = 'chat-handle';
-      handle.setAttribute('aria-hidden', 'true');
-      const top = document.createElement('div');
-      top.className = 'chat-top';
-      const closeButton = document.createElement('button');
-      closeButton.className = 'chat-close';
-      closeButton.type = 'button';
-      closeButton.setAttribute('aria-label', 'Close chat');
-      closeButton.textContent = '×';
-      closeButton.addEventListener('click', closeChatSheet);
-      top.append(handle, closeButton);
-      t.append(top);
-    }
+    const label = document.createElement('div');
+    label.className = 'panel-label';
+    const labelText = document.createElement('span');
+    labelText.textContent = 'Chat';
+    label.appendChild(labelText);
+    t.appendChild(label);
     state.chat.forEach((msg, i) => {
       const row = document.createElement('button');
       row.type = 'button';
@@ -688,6 +736,7 @@ function rebuildChatRail() {
       t.appendChild(row);
     });
     main.appendChild(t);
+    flashPanelLabel('chat');
   } else {
     main.classList.remove('with-chat');
     closeChatSheet();
@@ -849,9 +898,8 @@ document.addEventListener('click', (e) => {
   if (!e.target.closest('.nav-uploads')) closeUploadsMenu();
 });
 
-// Keeps --footer-h in sync with the footer's real rendered height (it changes between
-// normal/fullscreen and desktop/mobile), so the transcript/chat rails can reserve exactly
-// enough space to never sit underneath it, at any scroll position.
+// Keeps --footer-h in sync with the footer's real height (it changes across fullscreen/mobile),
+// so the transcript/chat sheets can reserve exactly enough space to clear it.
 function updateFooterHeightVar() {
   document.documentElement.style.setProperty('--footer-h', footerEl.getBoundingClientRect().height + 'px');
 }
@@ -894,6 +942,7 @@ document.addEventListener('fullscreenchange', () => {
 });
 
 // init
+applySavedSettings();
 if (isNarrow()) {
   state.rail = false;
   document.getElementById('railBtn').textContent = 'Off';
@@ -907,3 +956,9 @@ rebuildChatRail();
 updateTranscriptUI();
 updateChatUI();
 render();
+
+// 'change' (via onchange="set…") applies the value but only fires on release; this keeps the
+// thumbless bar tracking position live while dragging instead of jumping only at the end.
+document.querySelectorAll('input[type=range]').forEach((slider) => {
+  slider.addEventListener('input', () => updateSliderFill(slider));
+});

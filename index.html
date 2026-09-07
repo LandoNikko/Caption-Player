@@ -10,7 +10,6 @@
 
 <header>
   <button type="button" class="hamburger-btn" id="hamburgerBtn" aria-label="Open menu" aria-expanded="false" onclick="toggleMenu()">
-    <span></span><span></span><span></span>
   </button>
   <div class="header-menu" id="headerMenu">
     <div class="nav-group nav-uploads">
@@ -36,13 +35,6 @@
 
     <div class="nav-divider" aria-hidden="true"></div>
 
-    <div class="nav-group nav-sidebars">
-      <button class="file-btn" id="transcriptHeaderBtn" onclick="toggleTranscript()" disabled>Transcript</button>
-      <button class="file-btn" id="chatHeaderBtn" onclick="toggleChat()" disabled>Chat</button>
-    </div>
-
-    <div class="nav-divider" aria-hidden="true"></div>
-
     <div class="nav-group nav-settings">
       <button class="file-btn" onclick="closeMenu(); togglePanel()">Settings</button>
     </div>
@@ -57,6 +49,14 @@
     </div>
 
   </section>
+  <button type="button" class="sidebar-handle sidebar-handle-transcript" id="transcriptHandleBtn" onclick="toggleTranscript()" disabled aria-label="Toggle transcription">
+    <svg class="chevron" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9,5 15,12 9,19"></polyline></svg>
+    <span class="sidebar-handle-label">Transcription</span>
+  </button>
+  <button type="button" class="sidebar-handle sidebar-handle-chat" id="chatHandleBtn" onclick="toggleChat()" disabled aria-label="Toggle chat">
+    <svg class="chevron" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9,5 15,12 9,19"></polyline></svg>
+    <span class="sidebar-handle-label">Chat</span>
+  </button>
 </main>
 
 <footer>
@@ -83,8 +83,6 @@
 
 <div class="sheet-backdrop" id="menuBackdrop" onclick="closeMenu()"></div>
 <div class="sheet-backdrop" id="panelBackdrop" onclick="closePanel()"></div>
-<div class="sheet-backdrop" id="transcriptBackdrop" onclick="closeTranscriptSheet()"></div>
-<div class="sheet-backdrop" id="chatBackdrop" onclick="closeChatSheet()"></div>
 
 <div class="style-panel" id="stylePanel" style="display: none;">
   <div class="panel-header">
@@ -107,11 +105,24 @@
 
     <div class="setting">
       <div class="setting-label-row"><span>Size</span><span class="setting-value" id="sizeValue">56px</span></div>
-      <input type="range" min="8" max="120" step="2" value="56" id="sizeSlider" onchange="setSize(this.value)">
+      <div class="slider-row">
+        <button type="button" class="slider-step" aria-label="Decrease size" onclick="stepSlider('sizeSlider', -1)">−</button>
+        <input type="range" min="8" max="120" step="2" value="56" id="sizeSlider" onchange="setSize(this.value)">
+        <button type="button" class="slider-step" aria-label="Increase size" onclick="stepSlider('sizeSlider', 1)">+</button>
+      </div>
     </div>
 
     <div class="setting">
-      <div class="setting-label">Text colour</div>
+      <div class="setting-label-row"><span>Caption width</span><span class="setting-value" id="widthValue">92%</span></div>
+      <div class="slider-row">
+        <button type="button" class="slider-step" aria-label="Decrease caption width" onclick="stepSlider('widthSlider', -1)">−</button>
+        <input type="range" min="40" max="100" step="2" value="92" id="widthSlider" onchange="setWidth(this.value)">
+        <button type="button" class="slider-step" aria-label="Increase caption width" onclick="stepSlider('widthSlider', 1)">+</button>
+      </div>
+    </div>
+
+    <div class="setting">
+      <div class="setting-label">Text color</div>
       <div class="color-swatches" id="colorSwatches"></div>
     </div>
 
@@ -122,29 +133,31 @@
 
     <div class="setting">
       <div class="setting-label-row"><span>Box opacity</span><span class="setting-value" id="opacityValue">78%</span></div>
-      <input type="range" min="0" max="1" step="0.05" value="0.78" id="opacitySlider" onchange="setOpacity(this.value)">
+      <div class="slider-row">
+        <button type="button" class="slider-step" aria-label="Decrease box opacity" onclick="stepSlider('opacitySlider', -1)">−</button>
+        <input type="range" min="0" max="1" step="0.05" value="0.78" id="opacitySlider" onchange="setOpacity(this.value)">
+        <button type="button" class="slider-step" aria-label="Increase box opacity" onclick="stepSlider('opacitySlider', 1)">+</button>
+      </div>
     </div>
 
-    <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px;">
-      <div class="setting-label" style="margin: 0;">Transcript rail</div>
+    <div class="setting-toggle-row">
+      <div class="setting-label">Transcript rail</div>
       <button class="style-btn toggle-btn" id="railBtn" onclick="toggleRail()">On</button>
     </div>
 
-    <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px;">
-      <div class="setting-label" style="margin: 0;">Chat rail</div>
+    <div class="setting-toggle-row">
+      <div class="setting-label">Chat rail</div>
       <button class="style-btn toggle-btn" id="chatRailBtn" onclick="toggleChatRail()">On</button>
     </div>
 
-    <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px;">
-      <div class="setting-label" style="margin: 0;">Chat usernames</div>
+    <div class="setting-toggle-row">
+      <div class="setting-label">Chat usernames</div>
       <button class="style-btn toggle-btn" id="chatUsernamesBtn" onclick="cycleChatUsernameMode()">On</button>
     </div>
-
-    <div class="panel-divider">Use the file buttons above to load audio, subtitles, and chat.</div>
   </div>
 </div>
 
-<div class="drag-overlay" id="dragOverlay">Drop audio, subtitles, or chat .txt</div>
+<div class="drag-overlay" id="dragOverlay">Drop audio, subtitles or chat .txt</div>
 <div class="error" id="error"></div>
 
 <audio id="audio"></audio>

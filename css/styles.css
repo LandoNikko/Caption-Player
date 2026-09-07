@@ -2,7 +2,25 @@
 html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background: #0c0d10; color: #e8e9ec; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; }
 a { color: #86d7e2; text-decoration: none; }
 a:hover { color: #b7ecf3; }
-input[type=range] { accent-color: #86d7e2; height: 18px; min-height: 28px; }
+/* --fill (set by JS) drives the gradient below to fake a progress fill with no native thumb;
+   background-size keeps that bar thin inside a taller tap target. Thumb is zeroed, not hidden,
+   so it can't still intercept drags. */
+input[type=range] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 28px;
+  min-height: 28px;
+  background: linear-gradient(to right, #86d7e2 0%, #86d7e2 var(--fill, 0%), #0c0d10 var(--fill, 0%), #0c0d10 100%);
+  background-size: 100% 4px;
+  background-repeat: no-repeat;
+  background-position: center;
+  border-radius: 2px;
+  cursor: pointer;
+}
+input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 0; height: 0; background: transparent; border: none; }
+input[type=range]::-moz-range-thumb { width: 0; height: 0; background: transparent; border: none; }
+input[type=range]::-moz-range-track { background: transparent; border: none; height: 28px; }
 select, input[type=file] { font-family: inherit; background: #16191f; color: #e8e9ec; border: 1px solid #2a2e36; border-radius: 4px; padding: 6px 8px; }
 button { font-family: inherit; cursor: pointer; touch-action: manipulation; }
 ::selection { background: #86d7e2; color: #0c0d10; }
@@ -32,22 +50,47 @@ header { display: flex; align-items: center; justify-content: flex-end; gap: 24p
 .uploads-dropdown { display: none; position: absolute; top: calc(100% + 8px); left: 0; z-index: 30; flex-direction: column; gap: 6px; padding: 10px; background: #12141a; border: 1px solid #2a2e36; border-radius: 6px; box-shadow: 0 12px 32px rgba(0,0,0,0.45); min-width: 180px; }
 .uploads-dropdown.show { display: flex; }
 
-main { display: grid; grid-template-columns: 1fr; min-height: 0; overflow: hidden; }
+main { display: grid; grid-template-columns: 1fr; min-height: 0; overflow: hidden; position: relative; }
 main.with-rail { grid-template-columns: 340px 1fr; }
 main.with-chat { grid-template-columns: 1fr 340px; }
 main.with-rail.with-chat { grid-template-columns: 340px 1fr 340px; }
 .stage { position: relative; display: grid; grid-template-rows: 1fr auto; min-height: 0; }
 .captions { display: flex; align-items: center; justify-content: center; padding: 48px 40px; min-height: 0; background: radial-gradient(120% 90% at 50% 40%, #12141a 0%, #0c0d10 70%); overflow: auto; }
-.caption-text { font-size: clamp(28px, 6vw, 56px); max-width: 80%; text-align: center; line-height: 1.3; font-weight: 500; color: #e8e9ec; }
+.caption-text { font-size: clamp(28px, 6vw, 56px); max-width: 92%; text-align: center; line-height: 1.3; font-weight: 500; color: #e8e9ec; }
 .caption-text.empty { font-size: clamp(18px, 4vw, 24px); color: #565c65; }
 
+/* Edge tabs for Transcript (left) / Chat (right). position:absolute keeps them out of grid
+   auto-placement, so they can shift to the rail's outer edge when it opens without affecting
+   column layout. Mobile turns the rail into a bottom sheet instead (767px query), where these
+   edge-shift rules don't apply since with-rail/with-chat are never set there. */
+.sidebar-handle { position: absolute; top: 0; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; padding: 0; border: 1px solid #2a2e36; border-top: none; background: #12141a; color: #8a9099; z-index: 17; transition: left 320ms cubic-bezier(0.22, 1, 0.36, 1), right 320ms cubic-bezier(0.22, 1, 0.36, 1), border-color 100ms, color 100ms; }
+.sidebar-handle:hover { color: #86d7e2; border-color: #86d7e2; }
+.sidebar-handle:disabled { display: none; }
+.sidebar-handle-transcript { left: 0; border-left: none; border-radius: 0 0 4px 0; }
+.sidebar-handle-chat { right: 0; border-right: none; border-radius: 0 0 0 4px; }
+main.with-rail .sidebar-handle-transcript { left: 340px; }
+main.with-chat .sidebar-handle-chat { right: 340px; }
+.sidebar-handle .chevron { display: block; transition: transform 180ms ease; }
+.sidebar-handle-label { display: none; }
+/* Desktop/tablet only: transcript/chat sit side-by-side, so the chevron flips left/right
+   to point at the panel it'll open/close. Mobile overrides this with up/down (see 767px query),
+   since there the same button sits at the bottom edge of a sheet that rises/falls instead. */
+@media (min-width: 768px) {
+  .sidebar-handle-transcript.active .chevron { transform: scaleX(-1); }
+  .sidebar-handle-chat:not(.active) .chevron { transform: scaleX(-1); }
+}
 
+/* Panel-open toast - a zero-height sticky anchor keeps the badge pinned to the visible
+   top-right corner of the scrollable panel no matter the current scroll offset, without
+   reserving any layout space (so it never shifts the cue/chat rows when it fades). */
+.panel-label { position: sticky; top: 0; height: 0; overflow: visible; z-index: 5; pointer-events: none; }
+.panel-label span { position: absolute; top: 8px; right: 12px; display: inline-block; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; font-family: ui-monospace, Menlo, monospace; color: #b7bcc4; background: rgba(10, 11, 14, 0.85); border: 1px solid #2a2e36; padding: 4px 8px; border-radius: 4px; opacity: 0; transition: opacity 400ms ease; }
+.panel-label.show span { opacity: 1; }
 
-.transcript { order: -1; border-right: 1px solid #1e2127; min-height: 0; height: 100%; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 8px 0 16px 0; background: #0a0b0e; }
-.transcript-top { display: none; }
-.transcript-close { display: none; border: none; background: transparent; color: #6f757e; font-size: 22px; line-height: 1; padding: 4px 8px; min-width: 44px; min-height: 44px; margin-left: auto; }
-.transcript-close:hover { color: #e8e9ec; }
-.transcript-handle { display: none; width: 36px; height: 4px; border-radius: 2px; background: #2a2e36; margin: 10px auto 0; }
+/* position+z-index so full screen's tap-zones (z-index 15) can't paint over this rail on
+   desktop/tablet too: an unpositioned grid item always loses to a positioned sibling regardless
+   of z-index number, so without this the rail would swallow clicks meant for its cue rows. */
+.transcript { order: -1; border-right: 1px solid #1e2127; min-height: 0; height: 100%; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 8px 0 16px 0; background: #0a0b0e; position: relative; z-index: 16; }
 .cue-row { width: 100%; padding: 11px 20px; cursor: pointer; border: 0; border-left: 2px solid transparent; background: transparent; color: inherit; font: inherit; text-align: left; transition: background 100ms; }
 .cue-row:hover { background: #0f1318; }
 .cue-row.active { border-left-color: #86d7e2; background: #131a1d; color: #e8e9ec; }
@@ -56,12 +99,8 @@ main.with-rail.with-chat { grid-template-columns: 340px 1fr 340px; }
 .cue-stamp { font-family: ui-monospace, Menlo, monospace; font-size: 10px; color: #565c65; margin-bottom: 4px; }
 .cue-text { font-size: 14px; line-height: 1.45; }
 
-/* Chat rail — Twitch-style stacked messages, order:1 keeps it on the right regardless of DOM position */
-.chat { order: 1; border-left: 1px solid #1e2127; min-height: 0; height: 100%; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 8px 0 16px 0; background: #0a0b0e; }
-.chat-top { display: none; }
-.chat-close { display: none; border: none; background: transparent; color: #6f757e; font-size: 22px; line-height: 1; padding: 4px 8px; min-width: 44px; min-height: 44px; margin-left: auto; }
-.chat-close:hover { color: #e8e9ec; }
-.chat-handle { display: none; width: 36px; height: 4px; border-radius: 2px; background: #2a2e36; margin: 10px auto 0; }
+/* Chat rail - Twitch-style stacked messages, order:1 keeps it on the right regardless of DOM position */
+.chat { order: 1; border-left: 1px solid #1e2127; min-height: 0; height: 100%; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 8px 0 16px 0; background: #0a0b0e; position: relative; z-index: 16; }
 .chat-row { display: block; width: 100%; padding: 3px 20px; cursor: pointer; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; transition: background 100ms, opacity 100ms; word-wrap: break-word; }
 .chat-row:hover { background: #0f1318; }
 .chat-row.past, .chat-row.active { opacity: 0.7; }
@@ -97,7 +136,12 @@ footer { border-top: 1px solid #1e2127; background: #0f1115; min-height: 0; }
 .setting { display: flex; flex-direction: column; gap: 7px; }
 .setting-label { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: #8a9099; }
 .setting-label-row { display: flex; justify-content: space-between; }
+.setting-toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .setting-value { font-family: ui-monospace, Menlo, monospace; color: #b7bcc4; }
+.slider-row { display: flex; align-items: center; gap: 8px; }
+.slider-row input[type=range] { flex: 1; min-width: 0; }
+.slider-step { flex-shrink: 0; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; padding: 0; border: 1px solid #2a2e36; border-radius: 4px; background: transparent; color: #b7bcc4; font-size: 15px; line-height: 1; }
+.slider-step:hover { border-color: #86d7e2; color: #86d7e2; }
 .color-swatches { display: flex; gap: 8px; }
 .swatch { width: 34px; height: 28px; border-radius: 3px; cursor: pointer; border: 2px solid #2a2e36; transition: border-color 100ms; }
 .swatch.active { border-color: #86d7e2; }
@@ -107,7 +151,6 @@ footer { border-top: 1px solid #1e2127; background: #0f1115; min-height: 0; }
 .style-btn.active { border-color: #86d7e2; background: rgba(134,215,226,0.12); color: #86d7e2; }
 .style-btn:hover { border-color: #86d7e2; }
 .toggle-btn { flex: none; padding: 7px 16px; }
-.panel-divider { border-top: 1px solid #22262d; padding-top: 14px; font-family: ui-monospace, Menlo, monospace; font-size: 10px; line-height: 1.7; color: #565c65; }
 
 .drag-overlay { position: fixed; inset: 0; z-index: 40; background: rgba(12,13,16,0.85); border: 2px dashed #86d7e2; display: none; align-items: center; justify-content: center; font-size: 18px; letter-spacing: 0.1em; text-transform: uppercase; color: #86d7e2; }
 .drag-overlay.show { display: flex; }
@@ -122,9 +165,14 @@ body.app-fullscreen footer { position: fixed; right: 0; bottom: 0; left: 0; z-in
 body.app-fullscreen .transport { display: none; }
 body.app-fullscreen .scrub-track { padding: 0 max(28px, env(safe-area-inset-left, 0px)); }
 body.app-fullscreen .caption-text { user-select: none; -webkit-user-select: none; }
-body.app-fullscreen .transcript,
-body.app-fullscreen .chat { height: calc(100% - var(--footer-h, 27px)); }
-body.app-fullscreen .fullscreen-tap-zones { position: fixed; inset: 0 0 26px; z-index: 40; display: grid; grid-template-columns: repeat(2, 1fr); }
+/* z-index 15: above plain caption content, but below the transcript/chat sheets (16) and their
+   handles (17) - so opening either while in full screen keeps them tappable instead of having
+   these full-screen invisible cue-jump buttons swallow the touch. */
+body.app-fullscreen .fullscreen-tap-zones { position: fixed; inset: 0 0 26px; z-index: 15; display: grid; grid-template-columns: repeat(2, 1fr); }
+@media (min-width: 768px) {
+  body.app-fullscreen .transcript,
+  body.app-fullscreen .chat { height: calc(100% - var(--footer-h, 27px)); }
+}
 .fullscreen-tap-zone { position: relative; border: 0; padding: 0; background: transparent; color: transparent; }
 .fullscreen-tap-zone:focus-visible { outline: 2px solid #86d7e2; outline-offset: -4px; }
 
@@ -139,6 +187,8 @@ input[type=file], input[type=color]#customColorInput { display: none; }
   main.with-rail { grid-template-columns: 280px 1fr; }
   main.with-chat { grid-template-columns: 1fr 280px; }
   main.with-rail.with-chat { grid-template-columns: 280px 1fr 280px; }
+  main.with-rail .sidebar-handle-transcript { left: 280px; }
+  main.with-chat .sidebar-handle-chat { right: 280px; }
   .captions { padding: 32px 24px; }
   .transport { padding: 4px 20px calc(16px + env(safe-area-inset-bottom, 0px)) 20px; }
   .scrub-track { padding: 0 20px; }
@@ -204,8 +254,34 @@ input[type=file], input[type=color]#customColorInput { display: none; }
 
   main.with-rail { grid-template-columns: 1fr; }
   main.with-chat { grid-template-columns: 1fr; }
-  .captions { padding: 20px 16px; align-items: center; justify-content: center; }
+  .captions { padding: 20px 16px; align-items: center; justify-content: center; transition: padding-bottom 220ms ease; }
   .caption-text { max-width: 100%; }
+  /* Caption centers across the whole stage height, but an open sheet is an opaque overlay across
+     its bottom - so without this, that center point (esp. for short captions) lands under the
+     sheet, hidden. Match the sheet's own max-height formula so captions re-center above it. */
+  main.transcript-open .captions,
+  main.chat-open .captions {
+    padding-bottom: min(62vh, 520px, calc(100vh - var(--footer-h, 0px) - 24px));
+  }
+
+  /* position:fixed here (not absolute like above) so the handle renders over the footer instead
+     of being clipped by main's overflow:hidden - it docks at the screen's bottom corners,
+     overlapping the transport bar, rather than sitting flush at main's own edge. */
+  .sidebar-handle { position: fixed; width: auto; height: 36px; top: auto; bottom: env(safe-area-inset-bottom, 0px); padding: 0 12px; gap: 6px; border: 1px solid #2a2e36; border-radius: 4px; transform: none; }
+  /* Full screen hides the transport bar and shrinks the footer to just the scrub track, which is
+     a draggable control (touch-action:none) - so there, dock above that footer instead of over it,
+     both to avoid masking the scrub track and to stay clear of its drag hit area. */
+  body.app-fullscreen .sidebar-handle { bottom: var(--footer-h, 0px); }
+  .sidebar-handle-transcript { left: 16px; }
+  .sidebar-handle-chat { right: 16px; flex-direction: row-reverse; }
+  body.panel-open .sidebar-handle,
+  body.menu-open .sidebar-handle { display: none; }
+  .sidebar-handle .chevron { transform: rotate(-90deg); flex-shrink: 0; }
+  .sidebar-handle.active .chevron { transform: rotate(90deg); }
+  .sidebar-handle-label { display: inline; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; font-family: ui-monospace, Menlo, monospace; white-space: nowrap; }
+  /* The corner label names each panel persistently, so the toast-on-open used on desktop
+     (which announces the same thing as a fading badge) would just be redundant here. */
+  .panel-label { display: none; }
 
   .transcript,
   .chat {
@@ -213,35 +289,21 @@ input[type=file], input[type=color]#customColorInput { display: none; }
     left: 0;
     right: 0;
     bottom: var(--footer-h, 0px);
-    z-index: 16;
-    max-height: min(62vh, 520px);
+    max-height: min(62vh, 520px, calc(100vh - var(--footer-h, 0px) - 24px));
     border-left: none;
     border-right: none;
     border-top: 1px solid #1e2127;
     border-radius: 14px 14px 0 0;
     padding-bottom: 12px;
-    transform: translateY(105%);
+    /* 105% of the sheet's own height only fully hides it when the sheet rests flush at the true
+       viewport edge. This one rests bottom:var(--footer-h) - a gap above that edge - so add the
+       footer height back in, or it keeps poking up behind whatever's underneath when "closed". */
+    transform: translateY(calc(105% + var(--footer-h, 0px)));
     transition: transform 220ms ease;
-    box-shadow: 0 -18px 48px rgba(0, 0, 0, 0.45);
     overscroll-behavior: contain;
   }
   main.transcript-open .transcript,
   main.chat-open .chat { transform: translateY(0); }
-  .transcript-handle,
-  .chat-handle { display: block; }
-  .transcript-top,
-  .chat-top {
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    position: sticky;
-    top: 0;
-    z-index: 2;
-    padding: 4px 8px 0;
-    background: #0a0b0e;
-  }
-  .transcript-close,
-  .chat-close { display: inline-flex; align-items: center; justify-content: center; }
   .cue-row { padding: 14px 20px; min-height: 44px; }
   .chat-row { padding: 6px 14px; }
 
@@ -289,6 +351,7 @@ input[type=file], input[type=color]#customColorInput { display: none; }
   .panel-header { margin-top: 4px; }
   .swatch { width: 40px; height: 36px; }
   .style-btn, .toggle-btn { min-height: 44px; }
+  .slider-step { min-width: 44px; min-height: 44px; }
 
   .error {
     left: 16px;
